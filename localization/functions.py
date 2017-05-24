@@ -1,4 +1,6 @@
 import torch
+import torch.nn.functional as F
+
 
 def iou(pred, gt):
     """
@@ -30,20 +32,47 @@ def iou(pred, gt):
     return iarea/(parea+garea-iarea)
 
 
-def yololike_loss(data, target):
-    pass
+def cl_func(output, target):
+    # class loss function
+    loss = 0
+    for b, w, h in torch.nonzero(target.data):
+        loss += F.cross_entropy(output[b, :, w, h].contiguous().view(1, -1), target[b, w, h])
+    return loss
 
 
-def filter_softmax(x):
-    """
-    softmax along filters
-    """
+def ll_func(output_loc, output_cls, target_loc, target_cls):
+    # location loss function
+    loc_loss = 0
+    cnf_loss = 0
+    for b, w, h in torch.nonzero(target_cls.data):
+        correct_index = target_cls.data[b, w, h]
+        prob = F.softmax(output_cls[b, correct_index, w, h])
+        p_box = output_loc[b, :4, w, h]
+        g_box = target_loc[b, :, w, h]
+        loc_loss += torch.sum((p_box - g_box) ** 2)
+        cnf_loss += (output_loc[b, 4, w, h] - prob * iou(p_box, g_box)) ** 2
 
-    assert x.dim() == 4, "dimension of input must be 4"
-    _, f, _, _ = x.size()
-    nom = torch.exp(x)
-    dinom = torch.sum(nom, 1).repeat(1, f, 1, 1)
-    return nom/dinom
+    return loc_loss, cnf_loss
+
+
+def yololike_loss(output, target, alpha=10, beta=1):
+    output_loc, output_cls = output
+    target_loc = target[:, :4, :, :]
+    target_cls = target[:, 4, :, :].long() # just class label
+
+    l_loss, cnf_loss = ll_func(output_loc, output_cls, target_loc, target_cls)
+    c_loss = cl_func(output_cls, target_cls)
+    total = l_loss + (alpha * c_loss) + (beta * cnf_loss)
+    return total, l_loss, c_loss
+
+
+def count_correct(output, target):
+
+    correct = 0
+    for b, w, h in torch.nonzero(target.data):
+        pred_cls = output.data[b, :, w, h].max()[1]
+        correct += pred_cls.eq(target.data).sum()
+    return correct
 
 if __name__ == '__main__':
     import doctest

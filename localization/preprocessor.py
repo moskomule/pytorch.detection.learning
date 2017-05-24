@@ -53,19 +53,19 @@ def generate_data(annotation: dict, image_size: int=150,
     image = Image.open(image_name).resize((image_size, image_size))
     image_tensor = to_torch(image)
 
-    # torch[:,x,x] = [1(bbox+conf.)+20class]
-    target_tensor = torch.zeros([625, grid_num, grid_num])
+    # torch[:,x,x] = [1*bbox+class_label]
+    target_tensor = torch.zeros([5, grid_num, grid_num])
     for i, (name, pos) in enumerate(annotation["objects"]):
-        obj_class = class_id[name]
         grid_x, grid_y = which_grid(pos[0:2], grid_size, scales)
         x, y, w, h = normalize_pos(pos, annotation["size"])
-        target_tensor[5+obj_class, grid_x, grid_y] = 1
-        target_tensor[0: 5, grid_x, grid_y] = torch.FloatTensor([x, y, w, h, 1])
+        target_tensor[4, grid_x, grid_y] = class_id[name]
+        target_tensor[0: 4, grid_x, grid_y] = torch.FloatTensor([x, y, w, h])
 
     return image_tensor, target_tensor, annotation["size"], scales
 
 
-def get_annotaions(dir, test_size=0.1):
+def get_annotations(dir, test_size=0.1):
+    dir = os.path.join(dir, "Annotations/")
     alist = xmls_to_list(dir)
     train, test = train_test_split(alist, test_size=test_size)
     return train, test
@@ -73,14 +73,14 @@ def get_annotaions(dir, test_size=0.1):
 
 class VocDataSet:
 
-    def __init__(self, annotations, image_size=150, grid_num=5, image_dir=""):
+    def __init__(self, annotations, image_size=150, grid_num=5, dir=""):
         """ 
         DataSet of VOC for DataLoader
         """
         self.annotations = annotations
         self.image_size = image_size
         self.grid_num = grid_num
-        self.image_dir = image_dir
+        self.image_dir = os.path.join(dir, "JPEGImages/")
 
     def __getitem__(self, index):
         return generate_data(self.annotations[index], self.image_size,

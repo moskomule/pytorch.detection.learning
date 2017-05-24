@@ -30,8 +30,7 @@ def parse_xml(xml_file):
 
 
 def xmls_to_list(directory):
-    xmls = [file for file in os.scandir(directory)
-            if file.split(".")[-1] == "xml"]
+    xmls = [file for file in os.scandir(directory)]
 
     return [parse_xml(xml) for xml in xmls]
 

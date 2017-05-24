@@ -6,7 +6,8 @@ from torch.nn import functional as F
 from functions import yololike_loss, count_correct
 
 cuda = torch.cuda.is_available()
-resnet = models.resnet50()
+resnet = models.resnet50(pretrained=True)
+# we use layers before average pooling
 reshead = torch.nn.Sequential(*list(resnet.children())[:-2])
 
 
@@ -21,9 +22,9 @@ class YOLOlike(nn.Module):
         super(YOLOlike, self).__init__()
         self.base_model = reshead
         # class = 20
-        self.conv_cls = torch.nn.Conv2d(2048, 20, kernel_size=1)
+        self.conv_cls = nn.Conv2d(2048, 20, kernel_size=1)
         # loc = points + confidence
-        self.conv_loc = torch.nn.Conv2d(2048, 5, kernel_size=1)
+        self.conv_loc = nn.Conv2d(2048, 5, kernel_size=1)
 
     def forward(self, x):
         x = self.base_model(x)

@@ -3,6 +3,7 @@ from PIL import Image
 
 from torchvision import transforms
 import torch
+from torch.nn.functional import softmax
 from torch.autograd import Variable
 
 totensor = transforms.Compose([transforms.ToTensor()])
@@ -19,6 +20,10 @@ def topk_2d(input, k):
         l.append([idx[i] // w, idx[i] % w])
 
     return l
+
+
+def find_cls(c_tensor):
+    return softmax(c_tensor).data.max(0)[1].sum()
 
 
 def _plot_rectangle(i_tensor, cood):
@@ -55,6 +60,7 @@ def create_bounding_box(image_name, image_size, data_root, model):
     # get high confidence grids
     idx = topk_2d(output_loc.data[4, :, :], 4)
     bdbox_t = [output_loc.data[:4, w, h] for w, h in idx]
+
     for loc in bdbox_t:
         x, y, w, h = loc * torch.FloatTensor([im_w, im_h, im_w/2, im_h/2])
         x_0 = int(max(x - w - 1, 0))
@@ -62,4 +68,15 @@ def create_bounding_box(image_name, image_size, data_root, model):
         x_1 = int(min(x + w, im_w) - 1)
         y_1 = int(min(y + h, im_h) - 1)
         origin = _plot_rectangle(origin, [x_0, x_1, y_0, y_1])
-    return origin
+
+    cls = [find_cls(output_cls[:, w, h])for w, h in idx]
+
+    # origin is annotated
+    return origin, cls
+
+
+if __name__ == '__main__':
+    from yolo_like import YOLOlike
+    model = YOLOlike()
+    o, l = create_bounding_box("2012_000004.jpg", 150, "sample", model)
+    print(l)

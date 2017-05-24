@@ -1,5 +1,9 @@
 import torch
 import torch.nn.functional as F
+from numba.decorators import jit
+
+
+cuda = torch.cuda.is_available()
 
 
 def iou(pred, gt):
@@ -31,7 +35,7 @@ def iou(pred, gt):
 
     return iarea/(parea+garea-iarea)
 
-
+@jit
 def cl_func(output, target):
     # class loss function
     loss = 0
@@ -40,6 +44,7 @@ def cl_func(output, target):
     return loss
 
 
+@jit
 def ll_func(output_loc, output_cls, target_loc, target_cls):
     # location loss function
     loc_loss = 0
@@ -55,14 +60,17 @@ def ll_func(output_loc, output_cls, target_loc, target_cls):
     return loc_loss, cnf_loss
 
 
+@jit
 def yololike_loss(output, target, alpha=10, beta=1):
     output_loc, output_cls = output
+
     target_loc = target[:, :4, :, :]
     target_cls = target[:, 4, :, :].long() # just class label
 
     l_loss, cnf_loss = ll_func(output_loc, output_cls, target_loc, target_cls)
     c_loss = cl_func(output_cls, target_cls)
     total = l_loss + (alpha * c_loss) + (beta * cnf_loss)
+
     return total, l_loss, c_loss
 
 

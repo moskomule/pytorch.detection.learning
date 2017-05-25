@@ -1,5 +1,9 @@
 import os
 from PIL import Image
+import numpy as np
+
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+from matplotlib.figure import Figure
 
 from torchvision import transforms
 import torch
@@ -42,24 +46,30 @@ def _plot_rectangle(i_tensor, cood):
 def create_bounding_box(image_name, image_size, data_root, model):
     model.eval()
 
+    fig = Figure()
+    canvas = FigureCanvas(fig)
+    ax = fig.gca()
+
     image_path = os.path.join(data_root, image_name)
     image = Image.open(image_path)
+    ax.imshow(image)
     im_h, im_w = image.size
-    origin = totensor(image)
 
     # unsqueeze for make batch_size = 1
     input = totensor(image.resize([image_size, image_size])).unsqueeze(0)
     if cuda:
         input = input.cuda()
-    output_loc, output_cls = model(Variable(input))
+    output_loc, output_cnf, output_cls = model(Variable(input))
     if cuda:
         output_loc = output_loc.cpu()
+        output_cnf = output_cnf.cpu()
         output_cls = output_cls.cpu()
     # squeeze because batch is 1
     output_cls.data.squeeze_(0), output_loc.data.squeeze_(0)
+    output_cnf = output_cnf.data[0, 0, :, :]
     # get high confidence grids
-    idx = topk_2d(output_loc.data[4, :, :], 4)
-    bdbox_t = [output_loc.data[:4, w, h] for w, h in idx]
+    idx = topk_2d(output_cnf, 4)
+    bdbox_t = [output_loc.data[:, w, h] for w, h in idx]
 
     for loc in bdbox_t:
         x, y, w, h = loc * torch.FloatTensor([im_w, im_h, im_w/2, im_h/2])
@@ -67,16 +77,24 @@ def create_bounding_box(image_name, image_size, data_root, model):
         y_0 = int(max(y - h - 1, 0))
         x_1 = int(min(x + w, im_w) - 1)
         y_1 = int(min(y + h, im_h) - 1)
-        origin = _plot_rectangle(origin, [x_0, x_1, y_0, y_1])
+        ax.plot([x_0, x_1], [y_0, y_0], 'r-')
+        ax.text(x_1, y_1, "?")
+        ax.axis('off')
 
     cls = [find_cls(output_cls[:, w, h])for w, h in idx]
+    canvas.draw()
 
+    bb_image = np.fromstring(canvas.tostring_rgb(), dtype='uint8', sep='')
+    bb_image = bb_image.reshape(fig.canvas.get_width_height()[::-1] + (3,))
     # origin is annotated
-    return origin, cls
+    return bb_image, cls
 
 
 if __name__ == '__main__':
+    """
+    this is kind of test code
+    """
     from yolo_like import YOLOlike
     model = YOLOlike()
     o, l = create_bounding_box("2012_000004.jpg", 150, "sample", model)
-    print(l)
+    print(o)

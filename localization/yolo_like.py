@@ -21,15 +21,18 @@ class YOLOlike(nn.Module):
     def __init__(self):
         super(YOLOlike, self).__init__()
         self.base_model = reshead
-        # class = 20
-        self.conv_cls = nn.Conv2d(2048, 20, kernel_size=1)
-        # loc = points + confidence
-        self.conv_loc = nn.Conv2d(2048, 5, kernel_size=1)
+        # class = 20 + 1("nothing")
+        self.conv_cls = nn.Conv2d(2048, 21, kernel_size=1)
+        # loc = 4 points
+        self.conv_loc = nn.Conv2d(2048, 4, kernel_size=1)
+        # confidence
+        self.conv_cnf = nn.Conv2d(2048, 1, kernel_size=1)
 
     def forward(self, x):
         x = self.base_model(x)
         loc_output = F.sigmoid(self.conv_loc(x))
-        return loc_output, self.conv_cls(x)
+        cnf_output = F.sigmoid(self.conv_cnf(x))
+        return loc_output, cnf_output, self.conv_cls(x)
 
 
 def train(model, optimizer, train_loader, *, debug=False, verbose=0):
@@ -43,7 +46,7 @@ def train(model, optimizer, train_loader, *, debug=False, verbose=0):
 
         optimizer.zero_grad()
         output = model(data)
-        loss, loc_loss, cls_loss = yololike_loss(output, target)
+        loss, loc_loss, cnf_loss, cls_loss = yololike_loss(output, target)
         epoch_loss += loss.data[0] / len(train_loader)
         epoch_loc_loss += loc_loss.data[0] / len(train_loader)
         epoch_cls_loss += cls_loss.data[0] / len(train_loader)
@@ -54,8 +57,11 @@ def train(model, optimizer, train_loader, *, debug=False, verbose=0):
             print(f"DEBUG MODE LOSS{epoch_loss}")
             break
 
-        elif i % 10 == 0 and verbose > 0:
+        elif i % 4 == 0 and verbose > 0:
             print(f"iteration:[{i}] loss:{loss.data[0]}")
+            print(f"iteration:[{i}] locloss:{loc_loss.data[0]}")
+            print(f"iteration:[{i}] clsloss:{cls_loss.data[0]}")
+            print(f"iteration:[{i}] cnfloss:{cnf_loss.data[0]}")
 
     return epoch_loss, epoch_loc_loss, epoch_cls_loss
 
@@ -79,4 +85,22 @@ def test(model, test_loader):
     return epoch_loss, loc_ioc, cls_correct
 
 
+if __name__ == '__main__':
 
+    import os
+    from torch.utils.data import DataLoader
+    from preprocessor import VocDataSet, get_annotations
+
+    yololike = YOLOlike()
+    if cuda:
+        yololike.cuda()
+    VOC_BASE = os.path.join("..", "data", "VOC2012")
+    IMAGE_SIZE = 150
+    optimizer = torch.optim.Adam(yololike.parameters())
+    train_a, test_a = get_annotations(VOC_BASE)
+    train_loader = DataLoader(VocDataSet(train_a, dir=VOC_BASE), batch_size=32, num_workers=4)
+    test_loader = DataLoader(VocDataSet(test_a, dir=VOC_BASE))
+    tot_loss, loc_loss, cls_loss = [], [], []
+    for i in range(10):
+        print(f"epoch {i}")
+        a, b, c = _debug(yololike, optimizer, train_loader)

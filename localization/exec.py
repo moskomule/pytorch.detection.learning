@@ -37,19 +37,19 @@ if __name__ == '__main__':
         if arg.debug:
             a, b, c = _debug(yololike, optimizer, train_loader)
         else:
-            a, b, c = train(yololike, optimizer, train_loader)
+            a, b, c = train(yololike, optimizer, train_loader, verbose=1)
         print("visualize sample")
-        o, l = create_bounding_box("2012_000004.jpg", 150, "sample", yololike)
-        o2, l2 = create_bounding_box("8435.jpg", 150, "sample", yololike)
-        l_id = [id_class[i] for i in l]
-        l2_id = [id_class[i] for i in l2]
-        print(l_id)
-        print(l2_id)
+        # o, l = create_bounding_box("2012_000004.jpg", 150, "sample", yololike)
+        # o2, l2 = create_bounding_box("8435.jpg", 150, "sample", yololike)
+        # l_id = [id_class[i] for i in l]
+        # l2_id = [id_class[i] for i in l2]
+        # print(l_id)
+        # print(l2_id)
         tot_loss.append(a)
         loc_loss.append(b)
         cls_loss.append(c)
         viz.line(X=np.arange(i+1), Y=np.array(tot_loss), win="loss", opts=dict(title="total loss"))
         viz.line(X=np.arange(i+1), Y=np.array(loc_loss), win="loc_loss", opts=dict(title="localization loss"))
         viz.line(X=np.arange(i+1), Y=np.array(cls_loss), win="cls_loss", opts=dict(title="classification loss"))
-        viz.image(img=o, win="test_image")
-        viz.image(img=o2, win="test_image")
+        # viz.image(img=o, win="test_image")
+        # viz.image(img=o2, win="test_image")

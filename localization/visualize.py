@@ -86,7 +86,7 @@ def create_bounding_box(image_name, image_size, data_root, model, *, dpi=120):
         x_1 = int(min(x + w, im_w) - 1)
         y_1 = int(min(y + h, im_h) - 1)
         ax.plot([y_0, y_0, y_1, y_1, y_0], [x_0, x_1, x_1, x_0, x_0])
-        ax.text(y_0, x_0, f"{id_class[cls]} {cnf:2f}", bbox={'alpha': 0.5})
+        ax.text(y_0, x_0, f"{id_class[cls]}", bbox={'alpha': 0.5})
         ax.axis('off')
 
     canvas.draw()

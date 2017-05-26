@@ -21,8 +21,8 @@ class YOLOlike(nn.Module):
     def __init__(self):
         super(YOLOlike, self).__init__()
         self.base_model = reshead
-        # class = 20
-        self.conv_cls = nn.Conv2d(2048, 20, kernel_size=1)
+        # class = 20 + background
+        self.conv_cls = nn.Conv2d(2048, 21, kernel_size=1)
         # loc = 4 points
         self.conv_loc = nn.Conv2d(2048, 4, kernel_size=1)
         # confidence

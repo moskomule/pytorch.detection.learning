@@ -36,7 +36,7 @@ def iou(pred, gt):
     return iarea/(parea+garea-iarea)
 
 
-def filter_softmax(x):
+def filter_logsoftmax(x):
     """
     softmax along filters
     """
@@ -57,7 +57,7 @@ def cls_loss_func(output, target, mask):
     # sum along classes and flatten
     flat = torch.sum(dist, 1).view(-1)
     # if no class for a grid, ignore it (mask `flat`)
-    return torch.sum(flat * mask.float().view(-1), 0)/torch.sum(mask.data)
+    return torch.sum(flat * mask.float().view(-1), 0)
 
 
 def loc_loss_func(output, target, mask):
@@ -69,27 +69,28 @@ def loc_loss_func(output, target, mask):
     dist = torch.pow(output - target, 2)
     # sum along classes and flatten
     flat = torch.sum(dist, 1).view(-1)
-    return torch.sum(flat*mask.float().view(-1), 0)/torch.sum(mask.data)
+    return torch.sum(flat*mask.float().view(-1), 0)
 
 
-def cnf_loss_func(output_loc, output_cnf, output_cls, target_loc, mask):
+def cnf_loss_func(output_loc, output_cnf, target_loc, mask, gamma):
     """
     confidence loss function
     """
     # confidence is
     def _cnf_loss(b, w, h):
-        correct_index = mask[b, w, h]  # todo
-        prob = F.softmax(output_cls[b, :, w, h])[correct_index]
         p_box = output_loc[b, :, w, h]
         g_box = target_loc[b, :, w, h]
-        return (output_cnf[b, 0, w, h] - prob * iou(p_box, g_box)) ** 2
+        return (output_cnf[b, 0, w, h] - iou(p_box, g_box)) ** 2
 
-    output = (_cnf_loss(b, w, h) for b, w, h in torch.nonzero(mask))
+    obj = (_cnf_loss(b, w, h) for b, w, h in torch.nonzero(mask))
+    no_obj = (torch.pow(output_cnf[b, 0, w, h], 2) for b, w, h
+              in torch.nonzero(1 - mask))
 
-    return sum(output)/len(output)
+    return sum(obj) + gamma * sum(no_obj)
 
 
-def yololike_loss(output, target, alpha=5, beta=5):
+def yololike_loss(output, target, alpha=0.2, beta=0.2, gamma=0.5):
+    # todo normalize by length 
     output_loc, output_cnf, output_cls = output
 
     target_loc = target[:, :4, :, :]
@@ -100,7 +101,8 @@ def yololike_loss(output, target, alpha=5, beta=5):
         mask = mask.cuda()
 
     loc_loss = loc_loss_func(output_loc, target_loc, mask)
-    cnf_loss = cnf_loss_func(output_loc, output_cnf, output_cls, target_loc, mask.data)
+    cnf_loss = cnf_loss_func(output_loc, output_cnf, target_loc,
+                             mask.data, gamma)
     cls_loss = cls_loss_func(output_cls, target_cls, mask)
 
     total = loc_loss + (alpha * cls_loss) + (beta * cnf_loss)

@@ -53,8 +53,8 @@ def generate_data(annotation: dict, image_size: int=150,
     image = Image.open(image_name).resize((image_size, image_size))
     image_tensor = to_torch(image)
 
-    # torch[:,x,x] = [1*bbox+class_size]
-    target_tensor = torch.zeros([24, grid_num, grid_num])
+    # torch[:,x,x] = [1*bbox+class_size+1]
+    target_tensor = torch.zeros([25, grid_num, grid_num])
     for i, (name, pos) in enumerate(annotation["objects"]):
         grid_x, grid_y = which_grid(pos[0:2], grid_size, scales)
         x, y, w, h = normalize_pos(pos, annotation["size"])

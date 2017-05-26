@@ -3,7 +3,7 @@ import torch.nn.functional as F
 from torch.nn import NLLLoss2d
 
 cuda = torch.cuda.is_available()
-WEIGHT = torch.ones(21)
+WEIGHT = torch.ones(21)/20
 WEIGHT[0] = 0  # "nothing"
 if cuda:
     WEIGHT = WEIGHT.cuda()
@@ -11,11 +11,8 @@ nll_loss_2d = NLLLoss2d(weight=WEIGHT)
 
 def iou(pred, gt):
     """
-    >>> a=iou([0.4, 0.5, 0.1, 0.2], [0.5, 0.5, 0.1, 0.2])
-    >>> (a-1/3) < 1e-2
-    True
-    >>> iou([0.4, 0.5, 0.1, 0.2], [0.1, 0.5, 0.1, 0.2])
-    0.0
+    iou
+    todo: make it faster using Cython etc.
     """
     px_0 = (pred[0] - pred[2])*10
     px_1 = (pred[0] + pred[2])*10
@@ -48,60 +45,63 @@ def filter_softmax(x):
     _, f, _, _ = x.size()
     nom = torch.exp(x)
     din = torch.sum(nom, 1).repeat(1, f, 1, 1)
-    return torch.log(nom/din)
+    return x-torch.log(din)
 
 
-def cls_loss_func(output, target):
+def cls_loss_func(output, target, mask):
     """
     class loss function
-    >>> from torch.autograd import Variable as V
-    >>> o, t = V(torch.randn(1,21,3,3)), V(torch.zeros(1,3,3).long())
-    >>> t[0,2,1], t[0,2,2] = 1, 10
-    >>> cls_loss_func(o, t).data.size()
-    torch.Size([1])
     """
-    # class loss function
-    output = filter_softmax(output)
-    return nll_loss_2d(output, target)
+    # pow2 distance from output to target
+    dist = torch.pow(output - target, 2)
+    # sum along classes and flatten
+    flat = torch.sum(dist, 1).view(-1)
+    # if no class for a grid, ignore it (mask `flat`)
+    return torch.sum(flat * mask.float().view(-1), 0)/torch.sum(mask.data)
 
 
 def loc_loss_func(output, target, mask):
     """
     location loss function
-    >>> from torch.autograd import Variable as V
-    >>> o,t,m = V(torch.zeros(1,3,3,3)),V(torch.zeros(1,3,3,3)),torch.zeros(1,3,3)
-    >>> o[0,2,0,0] = 1; m[0,0,0] = 1
-    >>> loc_loss_func(o, t, m) # distance should be ...
-    1.0
     """
-    dist = torch.pow(output-target, 2)
+    # pow 2 distance from output tor target
+    # todo scale output because w,h is half
+    dist = torch.pow(output - target, 2)
+    # sum along classes and flatten
     flat = torch.sum(dist, 1).view(-1)
-    return torch.sum(flat*mask.float().view(-1), 0)
+    return torch.sum(flat*mask.float().view(-1), 0)/torch.sum(mask.data)
 
 
-def cnf_loss_func(output_loc, output_cnf, output_cls, target_loc, target_cls):
-    cnf_loss = 0
-    for b, w, h in torch.nonzero(target_cls.data):
-        correct_index = target_cls.data[b, w, h] # todo
+def cnf_loss_func(output_loc, output_cnf, output_cls, target_loc, mask):
+    """
+    confidence loss function
+    """
+    # confidence is
+    def _cnf_loss(b, w, h):
+        correct_index = mask[b, w, h]  # todo
         prob = F.softmax(output_cls[b, :, w, h])[correct_index]
         p_box = output_loc[b, :, w, h]
         g_box = target_loc[b, :, w, h]
-        cnf_loss += (output_cnf[b, 0, w, h] - prob * iou(p_box, g_box)) ** 2
-    return cnf_loss
+        return (output_cnf[b, 0, w, h] - prob * iou(p_box, g_box)) ** 2
+
+    output = (_cnf_loss(b, w, h) for b, w, h in torch.nonzero(mask))
+
+    return sum(output)/len(output)
 
 
-def yololike_loss(output, target, alpha=1, beta=1):
+def yololike_loss(output, target, alpha=5, beta=5):
     output_loc, output_cnf, output_cls = output
 
     target_loc = target[:, :4, :, :]
-    target_cls = target[:, 4, :, :].long()
-    mask = torch.autograd.Variable(target_cls.data.gt(0))
+    target_cls = target[:, 4:, :, :]
+    # mask: 1 if there exists an object in a cell otherwise 0
+    mask = torch.autograd.Variable(target_cls.data.sum(1).gt(0).squeeze(1))
     if cuda:
         mask = mask.cuda()
 
     loc_loss = loc_loss_func(output_loc, target_loc, mask)
-    cnf_loss = cnf_loss_func(output_loc, output_cnf, output_cls, target_loc, target_cls)
-    cls_loss = cls_loss_func(output_cls, target_cls)
+    cnf_loss = cnf_loss_func(output_loc, output_cnf, output_cls, target_loc, mask.data)
+    cls_loss = cls_loss_func(output_cls, target_cls, mask)
 
     total = loc_loss + (alpha * cls_loss) + (beta * cnf_loss)
 
@@ -116,6 +116,3 @@ def count_correct(output, target):
         correct += pred_cls.eq(target.data).sum()
     return correct
 
-if __name__ == '__main__':
-    import doctest
-    doctest.testmod()

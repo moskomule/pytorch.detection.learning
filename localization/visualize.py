@@ -4,11 +4,14 @@ import numpy as np
 
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
+import matplotlib.image as mpimg
 
 from torchvision import transforms
 import torch
 from torch.nn.functional import softmax
 from torch.autograd import Variable
+
+from data_storage import id_class
 
 totensor = transforms.Compose([transforms.ToTensor()])
 topilimg = transforms.Compose([transforms.ToPILImage()])
@@ -27,7 +30,8 @@ def topk_2d(input, k):
 
 
 def find_cls(c_tensor):
-    return softmax(c_tensor).data.max(0)[1].sum()
+    tensor = softmax(c_tensor).data.max(0)[1]
+    return tensor.sum()
 
 
 def _plot_rectangle(i_tensor, cood):
@@ -43,16 +47,11 @@ def _plot_rectangle(i_tensor, cood):
     return i_tensor
 
 
-def create_bounding_box(image_name, image_size, data_root, model):
+def create_bounding_box(image_name, image_size, data_root, model, *, dpi=120):
     model.eval()
-
-    fig = Figure()
-    canvas = FigureCanvas(fig)
-    ax = fig.gca()
 
     image_path = os.path.join(data_root, image_name)
     image = Image.open(image_path)
-    ax.imshow(image)
     im_h, im_w = image.size
 
     # unsqueeze for make batch_size = 1
@@ -68,26 +67,34 @@ def create_bounding_box(image_name, image_size, data_root, model):
     output_cls.data.squeeze_(0), output_loc.data.squeeze_(0)
     output_cnf = output_cnf.data[0, 0, :, :]
     # get high confidence grids
-    idx = topk_2d(output_cnf, 4)
-    bdbox_t = [output_loc.data[:, w, h] for w, h in idx]
+    idx = topk_2d(output_cnf, 8)
 
-    for loc in bdbox_t:
+    bdbox_t = [output_loc.data[:, w, h] for w, h in idx]
+    cls_list = [find_cls(output_cls[:, w, h]) for w, h in idx]
+    cnf_list = [output_cnf[w, h] for w, h in idx]
+
+    image = mpimg.imread(image_path)
+    fig = Figure(figsize=(im_h/dpi, im_w/dpi), dpi=dpi)
+    canvas = FigureCanvas(fig)
+    ax = fig.gca()
+    ax.imshow(image)
+
+    for loc, cnf, cls in zip(bdbox_t, cnf_list, cls_list):
         x, y, w, h = loc * torch.FloatTensor([im_w, im_h, im_w/2, im_h/2])
         x_0 = int(max(x - w - 1, 0))
         y_0 = int(max(y - h - 1, 0))
         x_1 = int(min(x + w, im_w) - 1)
         y_1 = int(min(y + h, im_h) - 1)
-        ax.plot([x_0, x_1], [y_0, y_0], 'r-')
-        ax.text(x_1, y_1, "?")
+        ax.plot([y_0, y_0, y_1, y_1, y_0], [x_0, x_1, x_1, x_0, x_0])
+        ax.text(y_0, x_0, f"{id_class[cls]} {cnf:2f}", bbox={'alpha': 0.5})
         ax.axis('off')
 
-    cls = [find_cls(output_cls[:, w, h])for w, h in idx]
     canvas.draw()
-
-    bb_image = np.fromstring(canvas.tostring_rgb(), dtype='uint8', sep='')
-    bb_image = bb_image.reshape(fig.canvas.get_width_height()[::-1] + (3,))
-    # origin is annotated
-    return bb_image, cls
+    width, height = fig.get_size_inches() * fig.get_dpi()
+    image = np.fromstring(canvas.tostring_rgb(), dtype='uint8').reshape(int(height), int(width), 3)
+    tensor = totensor(Image.fromarray(image))
+    # image is numpy array and tensor is tensor
+    return image, tensor
 
 
 if __name__ == '__main__':
@@ -95,6 +102,9 @@ if __name__ == '__main__':
     this is kind of test code
     """
     from yolo_like import YOLOlike
+    import matplotlib.pyplot as plt
     model = YOLOlike()
     o, l = create_bounding_box("2012_000004.jpg", 150, "sample", model)
-    print(o)
+    plt.imshow(o)
+    plt.axis("off")
+    plt.show()

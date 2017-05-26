@@ -46,19 +46,19 @@ def generate_data(annotation: dict, image_size: int=150,
 
     image_name = os.path.join(image_dir, annotation["filename"])
     grid_size = image_size // grid_num
-    scales = (image_size / annotation["size"][0],
-              image_size / annotation["size"][1])
+    scales = (image_size / annotation["size"][0],  # width
+              image_size / annotation["size"][1])  # height
 
     to_torch = transforms.Compose([transforms.ToTensor()])
     image = Image.open(image_name).resize((image_size, image_size))
     image_tensor = to_torch(image)
 
-    # torch[:,x,x] = [1*bbox+class_label]
-    target_tensor = torch.zeros([5, grid_num, grid_num])
+    # torch[:,x,x] = [1*bbox+class_size]
+    target_tensor = torch.zeros([24, grid_num, grid_num])
     for i, (name, pos) in enumerate(annotation["objects"]):
         grid_x, grid_y = which_grid(pos[0:2], grid_size, scales)
         x, y, w, h = normalize_pos(pos, annotation["size"])
-        target_tensor[4, grid_x, grid_y] = class_id[name]
+        target_tensor[4+class_id[name], grid_x, grid_y] = 1
         target_tensor[0: 4, grid_x, grid_y] = torch.FloatTensor([x, y, w, h])
 
     return image_tensor, target_tensor, annotation["size"], scales

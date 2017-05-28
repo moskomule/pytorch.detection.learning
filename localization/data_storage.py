@@ -1,4 +1,4 @@
-voc_class = ["background", "person", "bird", "cat", "cow", "dog", "horse", "sheep",
+voc_class = ["person", "bird", "cat", "cow", "dog", "horse", "sheep",
              "aeroplane", "bicycle", "boat", "bus", "car", "motorbike",
              "train", "bottle", "chair", "diningtable", "pottedplant",
              "sofa", "tvmonitor"]

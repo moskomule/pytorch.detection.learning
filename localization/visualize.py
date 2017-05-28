@@ -29,9 +29,9 @@ def topk_2d(input, k):
     return l
 
 
-def find_cls(c_tensor):
-    tensor = softmax(c_tensor).data.max(0)[1]
-    return tensor.sum()
+def find_cls(input):
+    input = input.data.max(0)[1]
+    return input.sum()
 
 
 def _plot_rectangle(i_tensor, cood):

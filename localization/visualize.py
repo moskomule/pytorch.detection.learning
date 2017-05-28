@@ -67,11 +67,8 @@ def create_bounding_box(image_name, image_size, data_root, model, *, dpi=120):
     output_cls.data.squeeze_(0), output_loc.data.squeeze_(0)
     output_cnf = output_cnf.data[0, 0, :, :]
     # get high confidence grids
-    idx = topk_2d(output_cnf, 8)
-
-    bdbox_t = [output_loc.data[:, w, h] for w, h in idx]
-    cls_list = [find_cls(output_cls[:, w, h]) for w, h in idx]
-    cnf_list = [output_cnf[w, h] for w, h in idx]
+    grids = topk_2d(output_cnf, 4)
+    grid_size = image_size // 5
 
     image = mpimg.imread(image_path)
     fig = Figure(figsize=(im_h/dpi, im_w/dpi), dpi=dpi)
@@ -79,14 +76,18 @@ def create_bounding_box(image_name, image_size, data_root, model, *, dpi=120):
     ax = fig.gca()
     ax.imshow(image)
 
-    for loc, cnf, cls in zip(bdbox_t, cnf_list, cls_list):
-        x, y, w, h = loc * torch.FloatTensor([im_w, im_h, im_w/2, im_h/2])
+    for grid_x, grid_y in grids:
+        x, y, w, h = output_loc.data[:, grid_x, grid_y]
+        gc_x, gc_y = (grid_x+0.5) * grid_size, (grid_y+0.5) * grid_size
+        x, y = gc_x + (x*grid_size/2), gc_y + (y*grid_size/2)
+        x, y = x * im_w / image_size, y * im_h / image_size
+        w, h = w * im_w / 2, h * im_h / 2
         x_0 = int(max(x - w - 1, 0))
         y_0 = int(max(y - h - 1, 0))
         x_1 = int(min(x + w, im_w) - 1)
         y_1 = int(min(y + h, im_h) - 1)
         ax.plot([y_0, y_0, y_1, y_1, y_0], [x_0, x_1, x_1, x_0, x_0])
-        ax.text(y_0, x_0, f"{id_class[cls]}", bbox={'alpha': 0.5})
+        ax.text(y_0, x_0, f"{id_class[find_cls(output_cls[:, grid_x, grid_y])]}", bbox={'alpha': 0.5})
         ax.axis('off')
 
     canvas.draw()

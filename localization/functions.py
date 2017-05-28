@@ -57,7 +57,7 @@ def cls_loss_func(output, target, mask):
     # sum along classes and flatten
     flat = torch.sum(dist, 1).view(-1)
     # if no class for a grid, ignore it (mask `flat`)
-    return torch.sum(flat * mask.float().view(-1), 0)/torch.sum(mask)
+    return torch.sum(flat * mask.float().view(-1), 0)/torch.sum(mask.float())
 
 
 def loc_loss_func(output, target, mask):
@@ -69,7 +69,7 @@ def loc_loss_func(output, target, mask):
     dist = torch.pow(output - target, 2)
     # sum along classes and flatten
     flat = torch.sum(dist, 1).view(-1)
-    return torch.sum(flat*mask.float().view(-1), 0)/torch.sum(mask)
+    return torch.sum(flat*mask.float().view(-1), 0)/torch.sum(mask.float())
 
 
 def cnf_loss_func(output_loc, output_cnf, target_loc, mask, gamma):
@@ -82,11 +82,13 @@ def cnf_loss_func(output_loc, output_cnf, target_loc, mask, gamma):
         g_box = target_loc[b, :, w, h]
         return (output_cnf[b, 0, w, h] - iou(p_box, g_box)) ** 2
 
+    inv_mask = 1 - mask
+
     obj = (_cnf_loss(b, w, h) for b, w, h in torch.nonzero(mask))
     no_obj = (torch.pow(output_cnf[b, 0, w, h], 2) for b, w, h
-              in torch.nonzero(1 - mask))
+              in torch.nonzero(inv_mask))
 
-    return sum(obj)/len(obj) + gamma * sum(no_obj)/len(no_obj)
+    return sum(obj)/torch.sum(mask.float()) + gamma * sum(no_obj)/torch.sum(inv_mask.float())
 
 
 def yololike_loss(output, target, alpha=0.2, beta=0.2, gamma=0.5):

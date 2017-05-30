@@ -1,6 +1,8 @@
 import torch
 import torch.nn.functional as F
+from torch.autograd import Variable
 from torch.nn import NLLLoss2d
+from numba import jit
 
 cuda = torch.cuda.is_available()
 WEIGHT = torch.ones(21)/20
@@ -9,6 +11,8 @@ if cuda:
     WEIGHT = WEIGHT.cuda()
 nll_loss_2d = NLLLoss2d(weight=WEIGHT)
 
+
+@jit
 def iou(pred, gt):
     """
     iou
@@ -82,23 +86,25 @@ def cnf_loss_func(output_loc, output_cnf, target_loc, mask, gamma):
         g_box = target_loc[b, :, w, h]
         return (output_cnf[b, 0, w, h] - iou(p_box, g_box)) ** 2
 
+    # inv mask: 0 if there exists an object in a cell otherwise 1
     inv_mask = 1 - mask
 
     obj = (_cnf_loss(b, w, h) for b, w, h in torch.nonzero(mask))
     no_obj = (torch.pow(output_cnf[b, 0, w, h], 2) for b, w, h
               in torch.nonzero(inv_mask))
 
-    return sum(obj)/torch.sum(mask.float()) + gamma * sum(no_obj)/torch.sum(inv_mask.float())
+    return sum(obj)/torch.sum(mask.float()) \
+           + gamma * sum(no_obj)/torch.sum(inv_mask.float())
 
 
-def yololike_loss(output, target, alpha=0.2, beta=0.2, gamma=0.5):
-    # todo normalize by length
+def yololike_loss(output, target, alpha, beta, gamma):
     output_loc, output_cnf, output_cls = output
 
     target_loc = target[:, :4, :, :]
     target_cls = target[:, 4:, :, :]
     # mask: 1 if there exists an object in a cell otherwise 0
-    mask = torch.autograd.Variable(target_cls.data.sum(1).gt(0).squeeze(1))
+    mask = Variable(target_cls.data.sum(1).gt(0).squeeze(1),
+                    requires_grad=False)
     if cuda:
         mask = mask.cuda()
 
@@ -110,13 +116,3 @@ def yololike_loss(output, target, alpha=0.2, beta=0.2, gamma=0.5):
     total = loc_loss + (alpha * cls_loss) + (beta * cnf_loss)
 
     return total, loc_loss, cnf_loss, cls_loss
-
-
-def count_correct(output, target):
-
-    correct = 0
-    for b, w, h in torch.nonzero(target.data):
-        pred_cls = output.data[b, :, w, h].max()[1]
-        correct += pred_cls.eq(target.data).sum()
-    return correct
-

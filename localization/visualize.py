@@ -141,7 +141,7 @@ if __name__ == '__main__':
     """
     this is kind of test code
     """
-    from yolo_like import YOLOlike
+    from model import YOLOlike
     import matplotlib.pyplot as plt
     model = YOLOlike()
     o, l = create_bounding_box("2012_000004.jpg", 150, "sample", model)

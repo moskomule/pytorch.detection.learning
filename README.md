@@ -8,3 +8,11 @@ I learned its basics from slides and notebooks of [Deep Learning course of Maste
 
 ![](fcn/cat-fcn.jpg)
 ![](fcn/cat3-fcn.jpg)
+
+## localization
+
+An implementation of YOLO v1 [You Only Look Once: Unified, Real-Time Object Detection](https://arxiv.org/abs/1506.02640) and a modification of YOLO v1. The latter uses ResNet-50 as its feature extractor.
+
+### result
+
+*under experiment*

@@ -1,32 +1,17 @@
 import torch
-import torch.nn as nn
 from torchvision import transforms
 
-import numpy as np
 import matplotlib.pyplot as plt
 
 from PIL import Image
-
 import imagenet_tool
-
-def filter_softmax(x):
-    """
-    softmax along filters
-    """
-
-    assert x.dim() == 4, "dimension of input must be 4"
-    _, f, _, _ = x.size()
-    nom = torch.exp(x)
-    dinom = torch.sum(nom, 1).repeat(1, f, 1, 1)
-    return nom/dinom
 
 
 def load_image(image_path, image_size=None):
     image = Image.open(image_path)
     if image_size is not None:
         image = image.resize(image_size)
-    to_tensor = transforms.Compose([transforms.ToTensor()])
-    return to_tensor(image)
+    return transforms.ToTensor()(image)
 
 
 def build_heatmap(output, synset):
@@ -40,17 +25,15 @@ def build_heatmap(output, synset):
 
 
 def show_heatmap(heat_map, original_path, mode="save"):
-    to_pil = transforms.Compose([transforms.ToPILImage()])
-
     original = Image.open(original_path)
-    heat_map = to_pil(heat_map)
+    heat_map = heat_map.numpy()[0]
 
     plt.figure(figsize=(12, 4))
     plt.subplot(121)
     plt.imshow(original)
     plt.axis("off")
     plt.subplot(122)
-    plt.imshow(heat_map, interpolation='nearest', cmap="viridis")
+    plt.imshow(heat_map)
     plt.axis("off")
     if mode == "show":
         plt.show()
